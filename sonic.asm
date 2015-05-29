@@ -263,9 +263,9 @@ GameInit:
 
 MainGameLoop:
 		move.b	(v_gamemode).w,d0 ; load Game Mode
-		andi.w	#$1C,d0
+		andi.w	#$1C,d0			; Limit Game Mode value to $1C max (Remove to add more game modes).
 		jsr	GameModeArray(pc,d0.w) ; jump to apt location in ROM
-		bra.s	MainGameLoop
+		bra.s	MainGameLoop		; Loop indefinitely.
 ; ===========================================================================
 ; ---------------------------------------------------------------------------
 ; Main game mode array
@@ -480,19 +480,19 @@ Art_Text:	incbin	"artunc\menutext.bin" ; text used in level select and debug mod
 ; Vertical interrupt
 ; ---------------------------------------------------------------------------
 
-VBlank:					; XREF: Vectors
-		movem.l	d0-a6,-(sp)
-		tst.b	(v_vbla_routine).w
-		beq.s	VBla_00
-		move.w	(vdp_control_port).l,d0
+VBlank:					; XREF: Vectors                      2005 Label - loc_B10
+		movem.l	d0-a6,-(sp)      ; Move all registers except for a7 to the stack.
+		tst.b	(v_vbla_routine).w ; Is the VBlank routine 0?
+		beq.s	VBla_00 ; If it is, run it.
+		move.w	(vdp_control_port).l,d0 
 		move.l	#$40000010,(vdp_control_port).l
 		move.l	(v_scrposy_dup).w,(vdp_data_port).l ; send screen y-axis pos. to VSRAM
 		btst	#6,(v_megadrive).w ; is Megadrive PAL?
 		beq.s	@notPAL		; if not, branch
 
-		move.w	#$700,d0
+		move.w	#$700,d0        ; 
 	@waitPAL:
-		dbf	d0,@waitPAL
+		dbf	d0,@waitPAL     ; 
 
 	@notPAL:
 		move.b	(v_vbla_routine).w,d0
@@ -769,13 +769,13 @@ sub_106E:				; XREF: VBla_02; et al
 ; ||||||||||||||| S U B	R O U T	I N E |||||||||||||||||||||||||||||||||||||||
 
 
-HBlank:
+HBlank:										; 2005 Label - PaltoCRAM
 		disable_ints
 		tst.w	(f_hbla_pal).w	; is palette set to change?
 		beq.s	@nochg		; if not, branch
-		move.w	#0,(f_hbla_pal).w
-		movem.l	a0-a1,-(sp)
-		lea	(vdp_data_port).l,a1
+		move.w	#0,(f_hbla_pal).w ; Disable HBlank palette routine flag.
+		movem.l	a0-a1,-(sp)       ; Push a0 and a1's values onto the stack.
+		lea	(vdp_data_port).l,a1 ; Load VDP data port into a1.
 		lea	(v_pal_water).w,a0 ; get palette from RAM
 		move.l	#$C0000000,4(a1) ; set VDP to CRAM write
 		move.l	(a0)+,(a1)	; move palette to CRAM
@@ -811,12 +811,12 @@ HBlank:
 		move.l	(a0)+,(a1)
 		move.l	(a0)+,(a1)
 		move.w	#$8A00+223,4(a1) ; reset HBlank register
-		movem.l	(sp)+,a0-a1
+		movem.l	(sp)+,a0-a1	; Restore a0 & a1's values.
 		tst.b	($FFFFF64F).w
 		bne.s	loc_119E
 
 	@nochg:
-		rte	
+		rte			; Return from exception.
 ; ===========================================================================
 
 loc_119E:
@@ -838,7 +838,7 @@ loc_119E:
 JoypadInit:				; XREF: GameClrRAM
 		stopZ80
 		waitZ80
-		moveq	#$40,d0
+		moveq	#$40,d0		; Set /TH pin high.
 		move.b	d0,($A10009).l	; init port 1 (joypad 1)
 		move.b	d0,($A1000B).l	; init port 2 (joypad 2)
 		move.b	d0,($A1000D).l	; init port 3 (expansion)
@@ -886,8 +886,8 @@ ReadJoypads:				; XREF: VBlank, HBlank
 
 
 VDPSetupGame:				; XREF: GameClrRAM; ChecksumError
-		lea	(vdp_control_port).l,a0
-		lea	(vdp_data_port).l,a1
+		lea	(vdp_control_port).l,a0   ; Load VDP control port into a0.
+		lea	(vdp_data_port).l,a1	  ; Load VDP data port into a1	
 		lea	(VDPSetupArray).l,a2
 		moveq	#$12,d7
 
@@ -1033,7 +1033,7 @@ SoundDriverLoad:			; XREF: GameClrRAM; GM_Title
 
 
 TilemapToVRAM:				; XREF: GM_Sega; GM_Title; SS_BGLoad
-		lea	(vdp_data_port).l,a6
+		lea	(vdp_data_port).l,a6		
 		move.l	#$800000,d4
 
 	Tilemap_Line:
@@ -1931,17 +1931,17 @@ GM_Sega:				; XREF: GameModeArray
 		move.w	#$8B00,(a6)	; full-screen vertical scrolling
 		clr.b	(f_wtr_state).w
 		disable_ints
-		move.w	(v_vdp_buffer1).w,d0
-		andi.b	#$BF,d0
-		move.w	d0,(vdp_control_port).l
+		move.w	(v_vdp_buffer1).w,d0	; Load VDP register 1 value into d0.
+		andi.b	#$BF,d0			; Disable display bit.
+		move.w	d0,(vdp_control_port).l	; Turn off display.
 		bsr.w	ClearScreen
 		locVRAM	0
 		lea	(Nem_SegaLogo).l,a0 ; load Sega	logo patterns
-		bsr.w	NemDec
-		lea	($FF0000).l,a1
+		bsr.w	NemDec			; Decompress to VRAM.	
+		lea	($FF0000).l,a1		; Load RAM space to decompress plane mappings.
 		lea	(Eni_SegaLogo).l,a0 ; load Sega	logo mappings
 		move.w	#0,d0
-		bsr.w	EniDec
+		bsr.w	EniDec			; Decompress to a1's RAM address.
 
 		copyTilemap	$FF0000,$E510,$17,7
 		copyTilemap	$FF0180,$C000,$27,$1B
