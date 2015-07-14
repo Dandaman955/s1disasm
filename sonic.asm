@@ -67,10 +67,10 @@ Region:		dc.b "JUE             " ; Region
 
 ; ===========================================================================
 
-ErrorTrap:
-		nop	
-		nop	
-		bra.s	ErrorTrap
+ErrorTrap:					; Freeze the 68K.
+		nop				; Delay.
+		nop				; ''
+		bra.s	ErrorTrap		; Loop indefinitely.
 ; ===========================================================================
 
 EntryPoint:
@@ -80,28 +80,29 @@ EntryPoint:
 	PortA_Ok:
 		bne.s	SkipSetup
 
-		lea	SetupValues(pc),a5
-		movem.w	(a5)+,d5-d7
-		movem.l	(a5)+,a0-a4
-		move.b	-$10FF(a1),d0	; get hardware version (from $A10001)
-		andi.b	#$F,d0
-		beq.s	SkipSecurity
-		move.l	#'SEGA',$2F00(a1) ; move "SEGA" to TMSS register ($A14000)
+		lea	SetupValues(pc),a5      ; Load setup values array address.
+		movem.w	(a5)+,d5-d7		; d5 - $8000, d6 - $3FFF, d7 - $0100
+		movem.l	(a5)+,a0-a4		; a0 - $A00000, a1 - $A11100, a2 - $A11200
+						; a3 - $C00000, a4 - $C00004
+		move.b	-$10FF(a1),d0	; Check the version register port (from $A10001).
+		andi.b	#$F,d0		; Get the hardware version (lowest 4 bits).
+		beq.s	SkipSecurity	; If it's a model 0 Mega Drive, skip TMSS write.
+		move.l	#'SEGA',$2F00(a1) ; move "SEGA" to TMSS register ($A14000).
 
 SkipSecurity:
-		move.w	(a4),d0
-		moveq	#0,d0
-		movea.l	d0,a6
-		move.l	a6,usp		; set usp to 0
+		move.w	(a4),d0		; Check to see if the VDP hasn't locked up.
+		moveq	#0,d0		; Clear d0.
+		movea.l	d0,a6		; Clear a0.
+		move.l	a6,usp		; set usp to 0, can only be set by address register.
 
-		moveq	#$17,d1
+		moveq	#$17,d1		; Set amount of VDP registers to init.
 VDPInitLoop:
-		move.b	(a5)+,d5	; add $8000 to value
-		move.w	d5,(a4)		; move value to	VDP register
-		add.w	d7,d5		; next register
-		dbf	d1,VDPInitLoop
-		move.l	(a5)+,(a4)
-		move.w	d0,(a3)		; clear	the VRAM
+		move.b	(a5)+,d5	; Add VDP register function value by $8000.
+		move.w	d5,(a4)		; Write to the VDP data port.
+		add.w	d7,d5		; Add by $100; init the next register.
+		dbf	d1,VDPInitLoop	; Repeat until 18 registers have been initialised.
+		move.l	(a5)+,(a4)	; Set the VDP to VRAM DMA.
+		move.w	d0,(a3)		; Clear the VRAM.
 		move.w	d7,(a1)		; stop the Z80
 		move.w	d7,(a2)		; reset	the Z80
 
@@ -109,38 +110,38 @@ VDPInitLoop:
 		btst	d0,(a1)		; has the Z80 stopped?
 		bne.s	WaitForZ80	; if not, branch
 
-		moveq	#$25,d2
+		moveq	#$25,d2		; Set instructions' length.
 Z80InitLoop:
-		move.b	(a5)+,(a0)+
-		dbf	d2,Z80InitLoop
-		move.w	d0,(a2)
+		move.b	(a5)+,(a0)+	; Write first byte to Z80 RAM.
+		dbf	d2,Z80InitLoop	; Repeat until initialised.
+		move.w	d0,(a2)		; Disable Z80 reset.
 		move.w	d0,(a1)		; start	the Z80
 		move.w	d7,(a2)		; reset	the Z80
 
 ClrRAMLoop:
-		move.l	d0,-(a6)
-		dbf	d6,ClrRAMLoop	; clear	the entire RAM
-		move.l	(a5)+,(a4)	; set VDP display mode and increment
+		move.l	d0,-(a6)	; Clear 4 bytes of RAM.
+		dbf	d6,ClrRAMLoop	; Repeat until the entire RAM is clear.
+		move.l	(a5)+,(a4)	; set VDP display mode and increment mode.
 		move.l	(a5)+,(a4)	; set VDP to CRAM write
 
-		moveq	#$1F,d3
+		moveq	#$1F,d3		; Set repeat times.
 ClrCRAMLoop:
-		move.l	d0,(a3)
-		dbf	d3,ClrCRAMLoop	; clear	the CRAM
-		move.l	(a5)+,(a4)
+		move.l	d0,(a3)		; Clear 2 palettes.
+		dbf	d3,ClrCRAMLoop	; repeat to clear the CRAM.
+		move.l	(a5)+,(a4)	; Set VDP to VSRAM write.
 
-		moveq	#$13,d4
+		moveq	#$13,d4		; Set repeat times.
 ClrVSRAMLoop:
-		move.l	d0,(a3)
-		dbf	d4,ClrVSRAMLoop ; clear the VSRAM
-		moveq	#3,d5
+		move.l	d0,(a3)		; Clear 4 bytes of VSRAM.
+		dbf	d4,ClrVSRAMLoop ; Repeat to clear the VSRAM.
+		moveq	#3,d5		; Set repeat times.
 
 PSGInitLoop:
 		move.b	(a5)+,$11(a3)	; reset	the PSG
-		dbf	d5,PSGInitLoop
+		dbf	d5,PSGInitLoop	; Repeat for other channels.
 		move.w	d0,(a2)
 		movem.l	(a6),d0-a6	; clear	all registers
-		disable_ints
+		disable_ints		; Disable all interrupts.
 
 SkipSetup:
 		bra.s	GameProgram	; begin game
@@ -464,7 +465,7 @@ ShowErrorValue:
 
 
 ErrorWaitForC:				; XREF: loc_478
-		bsr.w	ReadJoypads
+		bsr.w	ReadJoypads	; Update controller state.
 		cmpi.b	#btnC,(v_jpadpress1).w ; is button C pressed?
 		bne.w	ErrorWaitForC	; if not, branch
 		rts	
@@ -1921,7 +1922,7 @@ WaitForVBla:				; XREF: PauseGame
 
 GM_Sega:				; XREF: GameModeArray
 		sfx	bgm_Stop,0,1,1 ; stop music
-		bsr.w	ClearPLC
+		bsr.w	ClearPLC	; Clear PLC buffer.
 		bsr.w	PaletteFadeOut
 		lea	(vdp_control_port).l,a6
 		move.w	#$8004,(a6)	; use 8-colour mode
